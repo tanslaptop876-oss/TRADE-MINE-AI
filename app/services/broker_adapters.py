@@ -1,21 +1,52 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Mapping
 
 from app.services.broker_gateway import BrokerAdapter, BrokerOrder
+
+
+BROKER_REQUIRED_CREDENTIALS: dict[str, tuple[str, ...]] = {
+    "icici": ("api_key", "api_secret", "session_token"),
+    "zerodha": ("api_key", "api_secret", "access_token"),
+    "upstox": ("api_key", "api_secret", "access_token"),
+    "angelone": ("api_key", "client_code", "access_token"),
+    "motilal_oswal": ("api_key", "client_code", "access_token"),
+    "dhan": ("client_id", "access_token"),
+    "fyers": ("client_id", "access_token"),
+}
+
+
+@dataclass(frozen=True)
+class BrokerCredentials:
+    broker: str
+    values: Mapping[str, str] = field(default_factory=dict)
+
+    @property
+    def required_fields(self) -> tuple[str, ...]:
+        return BROKER_REQUIRED_CREDENTIALS.get(self.broker, ())
+
+    def missing_fields(self) -> list[str]:
+        return [name for name in self.required_fields if not self.values.get(name, "").strip()]
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.required_fields) and not self.missing_fields()
 
 
 @dataclass
 class ConfiguredBrokerAdapter(BrokerAdapter):
     name: str
-    credentials_configured: bool = False
+    credentials: BrokerCredentials | None = None
+    transport_connected: bool = False
 
     def connection_status(self) -> dict[str, Any]:
+        credentials = self.credentials or BrokerCredentials(self.name)
         return {
             "broker": self.name,
-            "configured": self.credentials_configured,
-            "connected": False,
+            "configured": credentials.configured,
+            "missing_credentials": credentials.missing_fields(),
+            "connected": self.transport_connected,
             "live_orders_enabled": False,
         }
 
@@ -32,16 +63,19 @@ class ConfiguredBrokerAdapter(BrokerAdapter):
         raise self._not_connected()
 
     def place_order(self, order: BrokerOrder) -> dict[str, Any]:
-        raise self._not_connected()
+        # Real-money execution remains intentionally disabled until the
+        # broker-specific transport passes auth, quote and funds smoke tests.
+        raise PermissionError(f"{self.name} live orders are not enabled")
 
 
-def default_broker_adapters() -> list[ConfiguredBrokerAdapter]:
+def default_broker_adapters(
+    credentials: Mapping[str, Mapping[str, str]] | None = None,
+) -> list[ConfiguredBrokerAdapter]:
+    credentials = credentials or {}
     return [
-        ConfiguredBrokerAdapter("icici"),
-        ConfiguredBrokerAdapter("zerodha"),
-        ConfiguredBrokerAdapter("upstox"),
-        ConfiguredBrokerAdapter("angelone"),
-        ConfiguredBrokerAdapter("motilal_oswal"),
-        ConfiguredBrokerAdapter("dhan"),
-        ConfiguredBrokerAdapter("fyers"),
+        ConfiguredBrokerAdapter(
+            name,
+            BrokerCredentials(name, credentials.get(name, {})),
+        )
+        for name in BROKER_REQUIRED_CREDENTIALS
     ]
