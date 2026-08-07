@@ -1,15 +1,9 @@
-from app.services.indicators import add_indicators
-
-def test_indicators():
-    rows = []
-    for i in range(70):
-        p = 100 + i * 0.2
-        rows.append({
-            "timestamp": f"2026-01-{(i % 28) + 1:02d}",
-            "open": p, "high": p + 1, "low": p - 1,
-            "close": p, "volume": 1000
-        })
-    df = add_indicators(rows)
-    assert "ema20" in df.columns
-    assert "rsi14" in df.columns
-    assert "atr14" in df.columns
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.8,<3.0
+pandas>=2.2,<3.0
+numpy>=2.0,<3.0
+streamlit>=1.36,<2.0
+yfinance>=0.2.40,<1.0
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
