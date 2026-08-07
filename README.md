@@ -1,11 +1,6 @@
-import pandas as pd
-from app.data.provider import MarketDataProvider
-
-def test_validation():
-    df = pd.DataFrame([{
-        "timestamp": "2026-01-01",
-        "open": 100, "high": 102, "low": 99, "close": 101, "volume": 1000
-    }])
-    out = MarketDataProvider.validate(df)
-    assert len(out) == 1
-    assert str(out["timestamp"].dtype).startswith("datetime")
+timestamp,open,high,low,close,volume
+2026-01-01,100,101,99,100.5,1000
+2026-01-02,100.5,102,100,101.5,1100
+2026-01-03,101.5,103,101,102.5,1200
+2026-01-04,102.5,104,102,103.5,1300
+2026-01-05,103.5,105,103,104.5,1400

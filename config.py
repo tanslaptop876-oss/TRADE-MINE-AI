@@ -1,37 +1,23 @@
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
-from app.services.decision import DecisionEngine
-from app.services.risk import RiskEngine
-from app.services.indicators import add_indicators
-from app.api.backtest import router as backtest_router
-from app.api.market_data import router as market_data_router
+from fastapi import APIRouter, HTTPException
+from app.data.csv_provider import CSVMarketDataProvider
+from app.services.pro_backtest import run_ema_backtest_v2
 
-app = FastAPI(title="TradeMind AI", version="0.2.0")
-app.include_router(backtest_router)
-app.include_router(market_data_router)
+router = APIRouter(prefix="/v1/backtest", tags=["backtest"])
 
-class Candle(BaseModel):
-    timestamp: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float = 0
-
-class SignalRequest(BaseModel):
-    candles: list[Candle]
-    capital: float = Field(default=100000, gt=0)
-    risk_per_trade: float = Field(default=0.01, gt=0, lt=0.1)
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "service": "trademind-ai", "version": "0.2.0"}
-
-@app.post("/v1/signal")
-def signal(req: SignalRequest):
-    df = add_indicators([c.model_dump() for c in req.candles])
-    decision = DecisionEngine().evaluate(df)
-    risk = RiskEngine(req.risk_per_trade).size_position(
-        capital=req.capital, entry=decision.entry, stop=decision.stop_loss
-    )
-    return {"decision": decision.model_dump(), "risk": risk}
+@router.post("/csv")
+def backtest_csv(path: str, initial_capital: float = 100000,
+                 risk_per_trade: float = 0.01, fee_rate: float = 0.0005,
+                 slippage_rate: float = 0.0002):
+    try:
+        df = CSVMarketDataProvider().load_csv(path)
+        result = run_ema_backtest_v2(
+            df.to_dict("records"),
+            initial_capital=initial_capital,
+            risk_per_trade=risk_per_trade,
+            fee_rate=fee_rate,
+            slippage_rate=slippage_rate,
+        )
+        return {"config": result.config, "metrics": result.metrics,
+                "trades": result.trades, "equity_curve": result.equity_curve}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

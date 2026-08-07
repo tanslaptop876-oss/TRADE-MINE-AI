@@ -1,5 +1,10 @@
-APP_ENV=development
-LOG_LEVEL=INFO
-MAX_RISK_PER_TRADE=0.01
-MAX_PORTFOLIO_RISK=0.05
-DEFAULT_CAPITAL=100000
+import pandas as pd
+from app.services.metrics import performance_metrics
+
+def test_metrics_basic():
+    equity = pd.Series([100, 105, 102, 110])
+    trades = [{"pnl": 5}, {"pnl": -2}, {"pnl": 8}]
+    m = performance_metrics(equity, trades)
+    assert m["trades"] == 3
+    assert m["win_rate_pct"] == 66.67
+    assert m["profit_factor"] == 6.5

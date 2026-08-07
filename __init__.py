@@ -1,36 +1,37 @@
-# TradeMind AI
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+from app.services.decision import DecisionEngine
+from app.services.risk import RiskEngine
+from app.services.indicators import add_indicators
+from app.api.backtest import router as backtest_router
+from app.api.market_data import router as market_data_router
 
-Modular AI-powered trading decision-support platform for Indian markets.
+app = FastAPI(title="TradeMind AI", version="0.2.0")
+app.include_router(backtest_router)
+app.include_router(market_data_router)
 
-## MVP / v0.3 foundation
-- Market-data abstraction
-- Technical indicators: EMA, RSI, MACD, ATR
-- Transparent decision engine with confidence/evidence
-- Risk-based position sizing
-- Backtesting baseline with fee/slippage
-- FastAPI backend
-- Streamlit dashboard
-- Unit tests + GitHub Actions
+class Candle(BaseModel):
+    timestamp: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0
 
-## Architecture
-Market Data -> Technical Engine -> Decision Engine -> Risk Engine -> Backtest/Paper Trade -> API/Dashboard
+class SignalRequest(BaseModel):
+    candles: list[Candle]
+    capital: float = Field(default=100000, gt=0)
+    risk_per_trade: float = Field(default=0.01, gt=0, lt=0.1)
 
-## Quick start
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "trademind-ai", "version": "0.2.0"}
 
-Open http://127.0.0.1:8000/docs
-
-Dashboard:
-```bash
-streamlit run dashboard/app.py
-```
-
-The included CSV provider lets you test without broker credentials. For live Indian-market data, implement a provider for your chosen broker/data vendor. Never commit API keys.
-
-This is a decision-support system, not a guarantee of returns. Validate with out-of-sample data and paper trading before risking capital.
+@app.post("/v1/signal")
+def signal(req: SignalRequest):
+    df = add_indicators([c.model_dump() for c in req.candles])
+    decision = DecisionEngine().evaluate(df)
+    risk = RiskEngine(req.risk_per_trade).size_position(
+        capital=req.capital, entry=decision.entry, stop=decision.stop_loss
+    )
+    return {"decision": decision.model_dump(), "risk": risk}

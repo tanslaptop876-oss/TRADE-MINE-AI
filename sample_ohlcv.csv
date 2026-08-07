@@ -1,20 +1,12 @@
-# TradeMind AI v0.2
+import pandas as pd
+from app.data.provider import MarketDataProvider
 
-## Delivered
-1. Provider abstraction for market data.
-2. OHLCV validation and symbol normalization.
-3. Professionalized baseline backtest with configurable fee/slippage.
-4. Equity curve and trade ledger.
-5. Performance metrics: return, CAGR, max drawdown, Sharpe, Sortino, win rate, profit factor.
-6. Walk-forward data split helper.
-7. Backtest API endpoint.
-8. Test coverage for provider and metrics.
+class CSVMarketDataProvider(MarketDataProvider):
+    def history(self, symbol: str, start: str = "", end: str = "", interval: str = "1d") -> pd.DataFrame:
+        raise NotImplementedError("Use load_csv(path) for the CSV provider.")
 
-## Next
-- Connect an approved Indian-market data provider.
-- Add NSE/BSE instrument master and trading-calendar handling.
-- Add realistic brokerage/STT/exchange/SEBI/GST/DP cost model where applicable.
-- Add short-side rules and order types.
-- Add paper-trading ledger and portfolio risk limits.
-- Add news/fundamental data.
-- Add ML/LLM decision layer only after a strong baseline.
+    def load_csv(self, path: str, symbol: str = "UNKNOWN") -> pd.DataFrame:
+        df = pd.read_csv(path)
+        df = self.validate(df)
+        df["symbol"] = symbol
+        return df

@@ -1,104 +1,82 @@
-from dataclasses import dataclass, asdict
+from pydantic import BaseModel, Field
 import pandas as pd
-from app.services.indicators import add_indicators
-from app.services.metrics import performance_metrics
 
-@dataclass
-class BacktestResult:
-    config: dict
-    metrics: dict
-    trades: list[dict]
-    equity_curve: list[dict]
+class Decision(BaseModel):
+    action: str
+    confidence: float = Field(ge=0, le=100)
+    entry: float
+    stop_loss: float
+    target: float
+    risk_reward: float
+    evidence: list[str]
+    invalidation: str
 
-def run_ema_backtest_v2(rows, initial_capital=100000, risk_per_trade=0.01,
-                        fee_rate=0.0005, slippage_rate=0.0002):
-    """
-    Long-only baseline strategy:
-      Entry: EMA20 > EMA50
-      Exit: EMA20 <= EMA50
-    Assumptions are explicit and configurable.
-    """
-    df = add_indicators(rows).dropna().reset_index(drop=True)
-    capital = float(initial_capital)
-    cash = capital
-    position = 0
-    entry_price = 0.0
-    entry_time = None
-    trades = []
-    equity_curve = []
+class DecisionEngine:
+    # Transparent baseline. ML/LLM layers can be added later without removing
+    # deterministic evidence and risk controls.
+    def evaluate(self, df: pd.DataFrame) -> Decision:
+        if len(df) < 55:
+            raise ValueError("At least 55 candles are required.")
 
-    for _, r in df.iterrows():
-        price = float(r["close"])
-        ts = str(r["timestamp"])
+        row = df.iloc[-1]
+        price = float(row["close"])
+        atr = float(row["atr14"])
+        if pd.isna(atr) or atr <= 0:
+            raise ValueError("Insufficient ATR data.")
 
-        if position == 0 and r["ema20"] > r["ema50"]:
-            risk_amount = cash * risk_per_trade
-            stop_distance = max(float(r["atr14"]) * 1.5, price * 0.005)
-            qty = int(risk_amount / stop_distance)
-            if qty > 0:
-                entry_price = price * (1 + slippage_rate)
-                entry_cost = qty * entry_price
-                fee = entry_cost * fee_rate
-                if entry_cost + fee <= cash:
-                    cash -= entry_cost + fee
-                    position = qty
-                    entry_time = ts
+        score = 0
+        evidence = []
 
-        elif position > 0 and r["ema20"] <= r["ema50"]:
-            exit_price = price * (1 - slippage_rate)
-            proceeds = position * exit_price
-            fee = proceeds * fee_rate
-            pnl = proceeds - fee - (position * entry_price)
-            cash += proceeds - fee
-            trades.append({
-                "entry_time": entry_time,
-                "exit_time": ts,
-                "entry": round(entry_price, 4),
-                "exit": round(exit_price, 4),
-                "quantity": position,
-                "pnl": round(pnl, 2),
-            })
-            position = 0
-            entry_price = 0.0
-            entry_time = None
+        if row["ema20"] > row["ema50"]:
+            score += 1
+            evidence.append("EMA20 is above EMA50")
+        else:
+            score -= 1
+            evidence.append("EMA20 is below EMA50")
 
-        equity = cash + (position * price if position else 0)
-        equity_curve.append({"timestamp": ts, "equity": equity})
+        if row["macd"] > row["macd_signal"]:
+            score += 1
+            evidence.append("MACD is above signal")
+        else:
+            score -= 1
+            evidence.append("MACD is below signal")
 
-    if position > 0:
-        price = float(df.iloc[-1]["close"])
-        exit_price = price * (1 - slippage_rate)
-        proceeds = position * exit_price
-        fee = proceeds * fee_rate
-        pnl = proceeds - fee - (position * entry_price)
-        cash += proceeds - fee
-        trades.append({
-            "entry_time": entry_time,
-            "exit_time": str(df.iloc[-1]["timestamp"]),
-            "entry": round(entry_price, 4),
-            "exit": round(exit_price, 4),
-            "quantity": position,
-            "pnl": round(pnl, 2),
-        })
-        equity_curve.append({"timestamp": str(df.iloc[-1]["timestamp"]), "equity": cash})
+        rsi = float(row["rsi14"])
+        if 50 <= rsi <= 70:
+            score += 1
+            evidence.append(f"RSI supports bullish momentum ({rsi:.1f})")
+        elif 30 <= rsi < 50:
+            score -= 1
+            evidence.append(f"RSI is weak ({rsi:.1f})")
 
-    eq = pd.Series([x["equity"] for x in equity_curve])
-    metrics = performance_metrics(eq, trades)
+        vol_ma = row["volume_ma20"]
+        if not pd.isna(vol_ma) and row["volume"] > vol_ma:
+            score += 1
+            evidence.append("Volume is above its 20-period average")
 
-    return BacktestResult(
-        config={
-            "initial_capital": initial_capital,
-            "risk_per_trade": risk_per_trade,
-            "fee_rate": fee_rate,
-            "slippage_rate": slippage_rate,
-        },
-        metrics=metrics,
-        trades=trades,
-        equity_curve=equity_curve,
-    )
+        if score >= 2:
+            action = "BUY"
+            stop = price - 1.5 * atr
+            target = price + 3.0 * atr
+        elif score <= -2:
+            action = "SELL"
+            stop = price + 1.5 * atr
+            target = price - 3.0 * atr
+        else:
+            action = "HOLD"
+            stop = price
+            target = price
 
-def walk_forward_slices(df: pd.DataFrame, train_ratio: float = 0.7):
-    if not 0.5 < train_ratio < 0.95:
-        raise ValueError("train_ratio must be between 0.5 and 0.95")
-    cut = int(len(df) * train_ratio)
-    return df.iloc[:cut].copy(), df.iloc[cut:].copy()
+        confidence = min(95.0, 50.0 + abs(score) * 10.0)
+        rr = abs(target - price) / max(abs(price - stop), 1e-9)
+
+        return Decision(
+            action=action,
+            confidence=confidence,
+            entry=price,
+            stop_loss=stop,
+            target=target,
+            risk_reward=rr,
+            evidence=evidence,
+            invalidation="Invalid if stop-loss is hit or trend structure reverses."
+        )
