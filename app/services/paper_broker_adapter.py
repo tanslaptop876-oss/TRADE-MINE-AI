@@ -30,11 +30,13 @@ class PaperBrokerAdapter(BrokerAdapter):
         return {"cash": round(self.account.cash, 2), "starting_cash": round(self.account.starting_cash, 2)}
 
     def place_order(self, order: BrokerOrder) -> dict[str, Any]:
+        if order.price is None:
+            raise ValueError("paper orders require an explicit execution price")
         return self.broker.execute(
             PaperOrder(
                 symbol=order.symbol,
                 side=Side(order.side.upper()),
                 quantity=order.quantity,
-                price=float(order.price) if order.price is not None else 0.0,
+                price=float(order.price),
             )
         )
