@@ -1,9 +1,13 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, live_risk_guard
+from app.services.live_risk_guard import TradingMode
 
 
 def test_readiness_defaults_to_safe_locked_state():
+    live_risk_guard.mode = TradingMode.PAPER
+    live_risk_guard.kill_switch = True
+    live_risk_guard.live_confirmed = False
     response = TestClient(app).get("/v1/readiness")
     assert response.status_code == 200
     payload = response.json()
@@ -13,6 +17,7 @@ def test_readiness_defaults_to_safe_locked_state():
 
 
 def test_shadow_order_records_intent_without_sending_broker_order():
+    live_risk_guard.mode = TradingMode.SHADOW
     response = TestClient(app).post(
         "/v1/shadow/order",
         json={
@@ -33,6 +38,7 @@ def test_shadow_order_records_intent_without_sending_broker_order():
 
 
 def test_shadow_order_rejects_invalid_side():
+    live_risk_guard.mode = TradingMode.SHADOW
     response = TestClient(app).post(
         "/v1/shadow/order",
         json={
