@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.services.assets import default_india_registry
 from app.services.broker_gateway import BrokerGateway, BrokerMode
+from app.services.broker_smoke import run_broker_smoke_test
 from app.services.decision import DecisionEngine
 from app.services.indicators import add_indicators
 from app.services.paper_broker_adapter import PaperBrokerAdapter
@@ -10,7 +11,7 @@ from app.services.paper_trading import PaperAccount, PaperBroker
 from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
 
-app = FastAPI(title="TradeMind AI", version="1.2.0")
+app = FastAPI(title="TradeMind AI", version="1.4.0")
 
 registry = default_india_registry()
 gateway_account = PaperAccount(starting_cash=100000)
@@ -42,7 +43,7 @@ class PaperRunRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "trademind-ai", "version": "1.2.0"}
+    return {"status": "ok", "service": "trademind-ai", "version": "1.4.0"}
 
 
 @app.get("/v1/brokers")
@@ -54,6 +55,15 @@ def broker_status():
             for name in broker_gateway.brokers()
         ],
     }
+
+
+@app.get("/v1/brokers/{broker}/smoke")
+def broker_smoke(broker: str, symbol: str):
+    try:
+        adapter = broker_gateway.get(broker)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"broker not registered: {broker}") from exc
+    return run_broker_smoke_test(adapter, symbol=symbol)
 
 
 @app.post("/v1/signal")

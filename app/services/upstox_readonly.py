@@ -12,6 +12,7 @@ HttpGet = Callable[..., Any]
 class UpstoxReadOnlyClient:
     quote_url = "https://api.upstox.com/v2/market-quote/quotes"
     funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+    positions_url = "https://api.upstox.com/v2/portfolio/short-term-positions"
 
     def __init__(self, *, access_token: str, request: HttpGet):
         self.access_token = access_token
@@ -45,6 +46,18 @@ class UpstoxReadOnlyClient:
         response.raise_for_status()
         return response.json()
 
+    def positions(self) -> list[dict[str, Any]]:
+        response = self.request(
+            "GET",
+            self.positions_url,
+            headers=self.headers,
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get("data", []) if isinstance(payload, Mapping) else []
+        return [dict(item) for item in data]
+
 
 def build_upstox_read_only_adapter(
     credentials: BrokerCredentials,
@@ -64,4 +77,5 @@ def build_upstox_read_only_adapter(
         credentials=credentials,
         quote_call=client.quote,
         funds_call=client.funds,
+        positions_call=client.positions,
     )
