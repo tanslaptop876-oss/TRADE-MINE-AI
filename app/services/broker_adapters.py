@@ -7,9 +7,12 @@ from app.services.broker_gateway import BrokerAdapter, BrokerOrder
 
 
 BROKER_REQUIRED_CREDENTIALS: dict[str, tuple[str, ...]] = {
-    "icici": ("api_key", "api_secret", "session_token"),
+    # ICICI Direct Trade API (normal ICICI Direct account): API session is
+    # obtained via interactive login, then exchanged for SessionToken.
+    "icici": ("app_key", "client_secret", "user_id", "api_session"),
     "zerodha": ("api_key", "api_secret", "access_token"),
-    "upstox": ("api_key", "api_secret", "access_token"),
+    # Upstox OAuth2 access token flow.
+    "upstox": ("client_id", "client_secret", "redirect_uri", "access_token"),
     "angelone": ("api_key", "client_code", "access_token"),
     "motilal_oswal": ("api_key", "client_code", "access_token"),
     "dhan": ("client_id", "access_token"),
@@ -63,8 +66,6 @@ class ConfiguredBrokerAdapter(BrokerAdapter):
         raise self._not_connected()
 
     def place_order(self, order: BrokerOrder) -> dict[str, Any]:
-        # Real-money execution remains intentionally disabled until the
-        # broker-specific transport passes auth, quote and funds smoke tests.
         raise PermissionError(f"{self.name} live orders are not enabled")
 
 
