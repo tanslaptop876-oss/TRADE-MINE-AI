@@ -2,7 +2,7 @@
 
 Modular AI-powered trading decision-support platform for Indian markets.
 
-## MVP / v0.2 foundation
+## MVP / v0.3 foundation
 - Market-data abstraction
 - Technical indicators: EMA, RSI, MACD, ATR
 - Transparent decision engine with confidence/evidence

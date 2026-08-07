@@ -1,20 +1,31 @@
-# TradeMind AI v0.2
+# TradeMind AI v0.3 — Indian Market Data Layer
 
-## Delivered
-1. Provider abstraction for market data.
-2. OHLCV validation and symbol normalization.
-3. Professionalized baseline backtest with configurable fee/slippage.
-4. Equity curve and trade ledger.
-5. Performance metrics: return, CAGR, max drawdown, Sharpe, Sortino, win rate, profit factor.
-6. Walk-forward data split helper.
-7. Backtest API endpoint.
-8. Test coverage for provider and metrics.
+## Goal
+Create a provider-agnostic data layer that can consume Indian-market historical data without coupling the strategy engine to one vendor.
 
-## Next
-- Connect an approved Indian-market data provider.
-- Add NSE/BSE instrument master and trading-calendar handling.
-- Add realistic brokerage/STT/exchange/SEBI/GST/DP cost model where applicable.
-- Add short-side rules and order types.
-- Add paper-trading ledger and portfolio risk limits.
-- Add news/fundamental data.
-- Add ML/LLM decision layer only after a strong baseline.
+## Included
+- Indian instrument master for initial development symbols.
+- Yahoo Finance development adapter using NSE notation such as `RELIANCE.NS`.
+- Local CSV caching.
+- OHLCV validation.
+- Data-quality reporting.
+- Market-data API endpoints.
+- Lightweight weekday calendar fallback.
+
+## Important
+The Yahoo adapter is for development/research. It is not a guarantee of exchange-grade real-time data, corporate-action completeness, or execution-grade timestamps.
+
+Before live/paper deployment, replace or supplement it with a licensed broker/exchange data feed and a proper Indian exchange holiday/calendar service.
+
+## API examples
+GET `/v1/market-data/instruments`
+
+GET `/v1/market-data/history/RELIANCE?start=2025-01-01&end=2026-01-01&interval=1d`
+
+## Next milestone
+v0.4:
+- realistic Indian transaction-cost model
+- walk-forward backtesting
+- portfolio-level risk
+- paper-trading ledger
+- broker adapter interface

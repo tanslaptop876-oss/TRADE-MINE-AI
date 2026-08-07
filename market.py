@@ -8,3 +8,5 @@ streamlit>=1.48,<2
 plotly>=6,<7
 pytest>=8,<9
 httpx>=0.28,<1
+
+yfinance>=0.2.40,<1
