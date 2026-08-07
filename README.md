@@ -1,6 +1,47 @@
-timestamp,open,high,low,close,volume
-2026-01-01,100,101,99,100.5,1000
-2026-01-02,100.5,102,100,101.5,1100
-2026-01-03,101.5,103,101,102.5,1200
-2026-01-04,102.5,104,102,103.5,1300
-2026-01-05,103.5,105,103,104.5,1400
+# TradeMind AI
+
+AI-powered trading decision-support platform focused on Indian markets.
+
+## Project goals
+
+- Market data ingestion and validation
+- Technical and fundamental analysis
+- AI-assisted BUY / HOLD / SELL decision support
+- Risk management and position sizing
+- Backtesting and performance metrics
+- Paper trading and portfolio management
+- Web dashboard for analysis and monitoring
+
+## Repository structure
+
+```text
+app/
+  services/       # market data, indicators, decisions, risk, backtesting
+  __init__.py
+
+dashboard/        # dashboard application
+sample_data/      # small datasets for development/tests
+tests/            # automated tests
+.github/workflows/ # CI
+requirements.txt
+```
+
+## Development setup
+
+Python 3.12+ is recommended.
+
+```bash
+python -m venv .venv
+# Windows: .venv\\Scripts\\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+pytest -q
+```
+
+## Status
+
+The project is currently in the cleanup/foundation stage. Changes are developed on feature branches and merged through pull requests before reaching `main`.
+
+## Disclaimer
+
+TradeMind AI is a software project for research, analysis, backtesting, and decision support. It does not guarantee investment returns and should not be treated as financial advice.
