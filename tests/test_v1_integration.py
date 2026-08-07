@@ -62,7 +62,7 @@ def test_paper_api_is_end_to_end_and_returns_account_state():
     assert payload["account"]["trade_count"] >= 0
 
 
-def test_health_reports_v1():
+def test_health_reports_v1_2():
     response = TestClient(app).get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.0.0"
+    assert response.json()["version"] == "1.2.0"

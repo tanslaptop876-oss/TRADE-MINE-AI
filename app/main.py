@@ -2,13 +2,20 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.services.assets import default_india_registry
+from app.services.broker_gateway import BrokerGateway, BrokerMode
 from app.services.decision import DecisionEngine
 from app.services.indicators import add_indicators
+from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
 from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
 
-app = FastAPI(title="TradeMind AI", version="1.0.0")
+app = FastAPI(title="TradeMind AI", version="1.2.0")
+
+registry = default_india_registry()
+gateway_account = PaperAccount(starting_cash=100000)
+broker_gateway = BrokerGateway(mode=BrokerMode.PAPER)
+broker_gateway.register(PaperBrokerAdapter(gateway_account, registry))
 
 
 class Candle(BaseModel):
@@ -35,7 +42,18 @@ class PaperRunRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "trademind-ai", "version": "1.0.0"}
+    return {"status": "ok", "service": "trademind-ai", "version": "1.2.0"}
+
+
+@app.get("/v1/brokers")
+def broker_status():
+    return {
+        "mode": broker_gateway.mode.value,
+        "brokers": [
+            broker_gateway.get(name).connection_status()
+            for name in broker_gateway.brokers()
+        ],
+    }
 
 
 @app.post("/v1/signal")
@@ -50,7 +68,6 @@ def signal(req: SignalRequest):
 
 @app.post("/v1/paper/run")
 def paper_run(req: PaperRunRequest):
-    registry = default_india_registry()
     account = PaperAccount(starting_cash=req.starting_cash)
     broker = PaperBroker(account, registry)
     pipeline = TradingPipeline(
