@@ -11,6 +11,8 @@ class IciciReadSdk(Protocol):
 
     def get_funds(self) -> Mapping[str, Any]: ...
 
+    def get_portfolio_positions(self) -> Mapping[str, Any] | list[Mapping[str, Any]]: ...
+
 
 class IciciReadOnlyClient:
     def __init__(self, sdk: IciciReadSdk):
@@ -21,6 +23,16 @@ class IciciReadOnlyClient:
 
     def funds(self) -> Mapping[str, Any]:
         return self.sdk.get_funds()
+
+    def positions(self) -> list[dict[str, Any]]:
+        payload = self.sdk.get_portfolio_positions()
+        if isinstance(payload, list):
+            return [dict(item) for item in payload]
+        if isinstance(payload, Mapping):
+            data = payload.get("data", [])
+            if isinstance(data, list):
+                return [dict(item) for item in data]
+        return []
 
 
 def build_icici_read_only_adapter(
@@ -38,4 +50,5 @@ def build_icici_read_only_adapter(
         credentials=credentials,
         quote_call=client.quote,
         funds_call=client.funds,
+        positions_call=client.positions,
     )
