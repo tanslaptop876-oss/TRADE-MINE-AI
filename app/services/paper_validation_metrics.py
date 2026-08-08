@@ -123,14 +123,16 @@ class PaperValidationMetrics:
                 if isinstance(issue, str) and issue
             ]
             run_number = snapshot.get("run_number", index)
-            public_snapshots.append(
-                {
-                    "run_number": run_number if isinstance(run_number, int) else index,
-                    "valid": snapshot.get("valid") is True,
-                    "issue_count": len(issues),
-                    "issues": issues[-self.max_recent_runs :],
-                }
-            )
+            public_snapshot = {
+                "run_number": run_number if isinstance(run_number, int) else index,
+                "valid": snapshot.get("valid") is True,
+                "issue_count": len(issues),
+                "issues": issues[-self.max_recent_runs :],
+            }
+            recorded_at = snapshot.get("recorded_at")
+            if isinstance(recorded_at, str) and recorded_at:
+                public_snapshot["recorded_at"] = recorded_at
+            public_snapshots.append(public_snapshot)
         return public_snapshots
 
     def summary(self) -> dict[str, Any]:
