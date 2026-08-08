@@ -38,6 +38,21 @@ pip install -r requirements.txt
 pytest -q
 ```
 
+## Paper-validation observability
+
+Read-only endpoints expose paper-validation health without enabling broker dispatch:
+
+- `GET /v1/paper/metrics` — aggregate health, thresholds, and recent snapshots
+- `GET /v1/paper/history?limit=20` — bounded restart-safe validation history
+- `GET /v1/observability/dashboard` — dashboard-ready metrics, alerts, and safety state
+
+History defaults to `data/paper_validation_history.jsonl`. Set
+`PAPER_VALIDATION_HISTORY_PATH` to use another local path. Generated history
+files are ignored by Git.
+
+See [the v1.8 plan](docs/V1_8_PLAN.md) for the next observability milestones.
+Real broker dispatch remains disabled.
+
 ## Status
 
 The project is currently in the cleanup/foundation stage. Changes are developed on feature branches and merged through pull requests before reaching `main`.
