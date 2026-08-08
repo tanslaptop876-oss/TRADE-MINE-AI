@@ -14,7 +14,8 @@ from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
 from app.services.shadow_execution import ShadowExecutionRecorder, ShadowOrderIntent
 
-app = FastAPI(title="TradeMind AI", version="1.5.0")
+APP_VERSION = "1.7.0"
+app = FastAPI(title="TradeMind AI", version=APP_VERSION)
 
 registry = default_india_registry()
 gateway_account = PaperAccount(starting_cash=100000)
@@ -57,12 +58,43 @@ class ShadowOrderRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "trademind-ai", "version": "1.5.0"}
+    return {"status": "ok", "service": "trademind-ai", "version": APP_VERSION}
 
 
 @app.get("/v1/readiness")
 def readiness():
-    return live_risk_guard.readiness()
+    result = dict(live_risk_guard.readiness())
+    result.update(
+        {
+            "service_version": APP_VERSION,
+            "broker_gateway_mode": broker_gateway.mode.value,
+            "shadow_intent_count": len(shadow_recorder.intents),
+            "real_broker_dispatch_enabled": False,
+        }
+    )
+    return result
+
+
+@app.get("/v1/shadow/summary")
+def shadow_summary():
+    intents = shadow_recorder.intents
+    return {
+        "mode": "shadow",
+        "intent_count": len(intents),
+        "broker_order_sent": False,
+        "executed": False,
+        "latest": None
+        if not intents
+        else {
+            "order_key": intents[-1].order_key,
+            "broker": intents[-1].broker,
+            "symbol": intents[-1].symbol,
+            "side": intents[-1].side.upper(),
+            "quantity": intents[-1].quantity,
+            "price": intents[-1].price,
+            "notional": intents[-1].notional,
+        },
+    }
 
 
 @app.post("/v1/shadow/order")
