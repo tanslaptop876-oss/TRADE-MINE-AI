@@ -7,6 +7,7 @@ from app.services.broker_smoke import run_broker_smoke_test
 from app.services.decision import DecisionEngine
 from app.services.indicators import add_indicators
 from app.services.live_risk_guard import LiveRiskGuard, TradingMode
+from app.services.paper_alerts import PaperAlertJournal, PaperAlertManager
 from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
 from app.services.paper_validation import validate_paper_result
@@ -27,6 +28,8 @@ live_risk_guard = LiveRiskGuard()
 shadow_recorder = ShadowExecutionRecorder()
 paper_validation_history = PaperValidationHistory.from_environment()
 paper_validation_metrics = PaperValidationMetrics(history=paper_validation_history)
+paper_alert_journal = PaperAlertJournal.from_environment()
+paper_alert_manager = PaperAlertManager(journal=paper_alert_journal)
 
 
 class Candle(BaseModel):
@@ -96,14 +99,65 @@ def paper_history(limit: int = Query(default=20, ge=1, le=100)):
     }
 
 
+def current_paper_alerts():
+    return paper_alert_manager.current(
+        paper_validation_metrics.alerts(),
+        current_run=paper_validation_metrics.total_runs,
+    )
+
+
+@app.get("/v1/observability/alerts")
+def observability_alerts():
+    alerts = current_paper_alerts()
+    return {
+        "alerts": alerts,
+        "active_alert_count": len(alerts),
+        "outbound_delivery_enabled": False,
+        "real_broker_dispatch_enabled": False,
+    }
+
+
+@app.post("/v1/observability/alerts/{code}/acknowledge")
+def acknowledge_observability_alert(code: str):
+    if code not in {alert["code"] for alert in current_paper_alerts()}:
+        raise HTTPException(status_code=404, detail="active alert not found")
+    paper_alert_manager.acknowledge(
+        code,
+        current_run=paper_validation_metrics.total_runs,
+    )
+    return {
+        "code": code,
+        "status": "acknowledged",
+        "outbound_delivery_enabled": False,
+        "real_broker_dispatch_enabled": False,
+    }
+
+
+@app.post("/v1/observability/alerts/{code}/resolve")
+def resolve_observability_alert(code: str):
+    if code not in {alert["code"] for alert in current_paper_alerts()}:
+        raise HTTPException(status_code=404, detail="active alert not found")
+    paper_alert_manager.resolve(
+        code,
+        current_run=paper_validation_metrics.total_runs,
+    )
+    return {
+        "code": code,
+        "status": "resolved",
+        "outbound_delivery_enabled": False,
+        "real_broker_dispatch_enabled": False,
+    }
+
+
 @app.get("/v1/observability/dashboard")
 def observability_dashboard():
-    alerts = paper_validation_metrics.alerts()
+    alerts = current_paper_alerts()
     return {
         "service": {"name": "trademind-ai", "version": APP_VERSION},
         "paper_validation": paper_validation_metrics.summary(),
         "alerts": alerts,
         "active_alert_count": len(alerts),
+        "outbound_delivery_enabled": False,
         "safety": {
             "broker_gateway_mode": broker_gateway.mode.value,
             "real_broker_dispatch_enabled": False,
