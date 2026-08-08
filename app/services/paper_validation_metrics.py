@@ -109,10 +109,29 @@ class PaperValidationMetrics:
 
     def history_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
         snapshots = self.recent_runs[-limit:]
-        return [
-            {**snapshot, "issues": list(snapshot["issues"])}
-            for snapshot in snapshots
-        ]
+        if self.history is not None and self.history_status == "ok":
+            try:
+                snapshots = self.history.recent(limit)
+            except OSError:
+                self.history_status = "error"
+
+        public_snapshots: list[dict[str, Any]] = []
+        for index, snapshot in enumerate(snapshots, start=1):
+            issues = [
+                issue
+                for issue in snapshot.get("issues") or []
+                if isinstance(issue, str) and issue
+            ]
+            run_number = snapshot.get("run_number", index)
+            public_snapshots.append(
+                {
+                    "run_number": run_number if isinstance(run_number, int) else index,
+                    "valid": snapshot.get("valid") is True,
+                    "issue_count": len(issues),
+                    "issues": issues[-self.max_recent_runs :],
+                }
+            )
+        return public_snapshots
 
     def summary(self) -> dict[str, Any]:
         return {
