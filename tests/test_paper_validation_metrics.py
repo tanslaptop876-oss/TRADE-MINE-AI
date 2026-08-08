@@ -8,6 +8,9 @@ from app.services.paper_validation_metrics import PaperValidationMetrics
 def reset_app_metrics() -> None:
     paper_validation_metrics.history = None
     paper_validation_metrics.history_status = "disabled"
+    paper_validation_metrics.max_recent_runs = 20
+    paper_validation_metrics.health_valid_rate_threshold = 0.95
+    paper_validation_metrics.health_min_runs = 5
     paper_validation_metrics.total_runs = 0
     paper_validation_metrics.valid_runs = 0
     paper_validation_metrics.invalid_runs = 0
