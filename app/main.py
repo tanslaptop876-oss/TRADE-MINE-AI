@@ -72,6 +72,7 @@ def readiness():
             "broker_gateway_mode": broker_gateway.mode.value,
             "shadow_intent_count": len(shadow_recorder.intents),
             "paper_validation_total_runs": paper_validation_metrics.total_runs,
+            "paper_validation_health_status": paper_validation_metrics.health_status(),
             "real_broker_dispatch_enabled": False,
         }
     )
