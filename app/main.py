@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.services.assets import default_india_registry
@@ -10,6 +10,7 @@ from app.services.live_risk_guard import LiveRiskGuard, TradingMode
 from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
 from app.services.paper_validation import validate_paper_result
+from app.services.paper_validation_history import PaperValidationHistory
 from app.services.paper_validation_metrics import PaperValidationMetrics
 from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
@@ -24,7 +25,8 @@ broker_gateway = BrokerGateway(mode=BrokerMode.PAPER)
 broker_gateway.register(PaperBrokerAdapter(gateway_account, registry))
 live_risk_guard = LiveRiskGuard()
 shadow_recorder = ShadowExecutionRecorder()
-paper_validation_metrics = PaperValidationMetrics()
+paper_validation_history = PaperValidationHistory.from_environment()
+paper_validation_metrics = PaperValidationMetrics(history=paper_validation_history)
 
 
 class Candle(BaseModel):
@@ -82,6 +84,31 @@ def readiness():
 @app.get("/v1/paper/metrics")
 def paper_metrics():
     return paper_validation_metrics.summary()
+
+
+@app.get("/v1/paper/history")
+def paper_history(limit: int = Query(default=20, ge=1, le=100)):
+    runs = paper_validation_metrics.history_snapshots(limit)
+    return {
+        "count": len(runs),
+        "runs": runs,
+        "real_broker_dispatch_enabled": False,
+    }
+
+
+@app.get("/v1/observability/dashboard")
+def observability_dashboard():
+    alerts = paper_validation_metrics.alerts()
+    return {
+        "service": {"name": "trademind-ai", "version": APP_VERSION},
+        "paper_validation": paper_validation_metrics.summary(),
+        "alerts": alerts,
+        "active_alert_count": len(alerts),
+        "safety": {
+            "broker_gateway_mode": broker_gateway.mode.value,
+            "real_broker_dispatch_enabled": False,
+        },
+    }
 
 
 @app.get("/v1/shadow/summary")
