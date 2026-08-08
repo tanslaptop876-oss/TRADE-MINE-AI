@@ -10,6 +10,7 @@ from app.services.live_risk_guard import LiveRiskGuard, TradingMode
 from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
 from app.services.paper_validation import validate_paper_result
+from app.services.paper_validation_metrics import PaperValidationMetrics
 from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
 from app.services.shadow_execution import ShadowExecutionRecorder, ShadowOrderIntent
@@ -23,6 +24,7 @@ broker_gateway = BrokerGateway(mode=BrokerMode.PAPER)
 broker_gateway.register(PaperBrokerAdapter(gateway_account, registry))
 live_risk_guard = LiveRiskGuard()
 shadow_recorder = ShadowExecutionRecorder()
+paper_validation_metrics = PaperValidationMetrics()
 
 
 class Candle(BaseModel):
@@ -69,10 +71,16 @@ def readiness():
             "service_version": APP_VERSION,
             "broker_gateway_mode": broker_gateway.mode.value,
             "shadow_intent_count": len(shadow_recorder.intents),
+            "paper_validation_total_runs": paper_validation_metrics.total_runs,
             "real_broker_dispatch_enabled": False,
         }
     )
     return result
+
+
+@app.get("/v1/paper/metrics")
+def paper_metrics():
+    return paper_validation_metrics.summary()
 
 
 @app.get("/v1/shadow/summary")
@@ -156,5 +164,7 @@ def paper_run(req: PaperRunRequest):
         "trade_count": len(account.trades),
     }
     result["account"] = account_snapshot
-    result["validation"] = validate_paper_result(result, account_snapshot).as_dict()
+    validation = validate_paper_result(result, account_snapshot).as_dict()
+    result["validation"] = validation
+    paper_validation_metrics.record(validation)
     return result
