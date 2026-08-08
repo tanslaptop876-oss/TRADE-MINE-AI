@@ -94,6 +94,38 @@ def test_persistent_history_restores_validation_state(tmp_path):
     assert restored.history_snapshots(1)[0]["run_number"] == 2
 
 
+def test_history_compacts_atomically_to_configured_retention(tmp_path):
+    history_path = tmp_path / "paper-validation.jsonl"
+    history = PaperValidationHistory(history_path, max_records=2)
+
+    for run_number in range(1, 4):
+        history.append(
+            {
+                "run_number": run_number,
+                "valid": True,
+                "issue_count": 0,
+                "issues": [],
+            }
+        )
+
+    retained = history.load()
+    assert [snapshot["run_number"] for snapshot in retained] == [2, 3]
+    assert all(snapshot["recorded_at"].endswith("Z") for snapshot in retained)
+    assert not history_path.with_suffix(".jsonl.tmp").exists()
+
+
+def test_history_load_skips_malformed_records(tmp_path):
+    history_path = tmp_path / "paper-validation.jsonl"
+    history_path.write_text(
+        'not-json\n{"run_number":2,"valid":true,"issues":[]}\n',
+        encoding="utf-8",
+    )
+
+    assert history.load() == [
+        {"run_number": 2, "valid": True, "issues": []}
+    ]
+
+
 def test_health_status_uses_explicit_sample_and_valid_rate_thresholds():
     healthy = PaperValidationMetrics(
         health_min_runs=3,
