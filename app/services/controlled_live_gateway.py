@@ -14,7 +14,7 @@ class ControlledLiveGateway:
     risk_guard: LiveRiskGuard
     audit_log: AuditLog
 
-    def place_order(self, *, order_key: str, order: BrokerOrder, reference_price: float) -> dict[str, Any]:
+    def preflight_order(self, *, order_key: str, order: BrokerOrder, reference_price: float) -> dict[str, Any]:
         self.audit_log.record(
             "live_order_attempted",
             broker=self.adapter.name,
@@ -41,23 +41,23 @@ class ControlledLiveGateway:
             )
             raise
 
-        try:
-            result = self.adapter.place_order(order)
-        except Exception as exc:
-            self.audit_log.record(
-                "live_order_failed",
-                broker=self.adapter.name,
-                order_key=order_key,
-                reason=str(exc),
-                error_type=type(exc).__name__,
-            )
-            raise
-
-        self.risk_guard.mark_order_accepted(order_key)
         self.audit_log.record(
-            "live_order_sent",
+            "live_order_preflight_approved",
             broker=self.adapter.name,
             order_key=order_key,
-            result=result,
         )
-        return result
+        return {
+            "approved": True,
+            "executed": False,
+            "broker_order_sent": False,
+            "mode": "live_preflight",
+            "broker": self.adapter.name,
+            "order_key": order_key,
+        }
+
+    def place_order(self, *, order_key: str, order: BrokerOrder, reference_price: float) -> dict[str, Any]:
+        return self.preflight_order(
+            order_key=order_key,
+            order=order,
+            reference_price=reference_price,
+        )
