@@ -44,17 +44,25 @@ class PaperValidationMetrics:
 
         self.recent_issues.extend(issues)
         self.recent_issues = self.recent_issues[-self.max_recent_runs :]
-        self.recent_runs.append(
-            {
-                "run_number": self.total_runs,
-                "valid": valid,
-                "issue_count": len(issues),
-                "issues": issues[-self.max_recent_runs :],
-            }
-        )
+        recent_snapshot = {
+            "run_number": self.total_runs,
+            "valid": valid,
+            "issue_count": len(issues),
+            "issues": issues[-self.max_recent_runs :],
+        }
+        for key in ("symbol", "service_version"):
+            value = snapshot.get(key)
+            if isinstance(value, str) and value:
+                recent_snapshot[key] = value
+        self.recent_runs.append(recent_snapshot)
         self.recent_runs = self.recent_runs[-self.max_recent_runs :]
 
-    def record(self, validation: dict[str, Any]) -> None:
+    def record(
+        self,
+        validation: dict[str, Any],
+        *,
+        context: dict[str, str] | None = None,
+    ) -> None:
         snapshot = {
             "valid": validation.get("valid") is True,
             "issues": [
@@ -63,6 +71,11 @@ class PaperValidationMetrics:
                 if isinstance(issue, str) and issue
             ],
         }
+        if context:
+            for key in ("symbol", "service_version"):
+                value = context.get(key)
+                if isinstance(value, str) and value:
+                    snapshot[key] = value
         self._apply_snapshot(snapshot)
         if self.history is not None:
             persisted = dict(self.recent_runs[-1])
@@ -129,9 +142,10 @@ class PaperValidationMetrics:
                 "issue_count": len(issues),
                 "issues": issues[-self.max_recent_runs :],
             }
-            recorded_at = snapshot.get("recorded_at")
-            if isinstance(recorded_at, str) and recorded_at:
-                public_snapshot["recorded_at"] = recorded_at
+            for key in ("recorded_at", "symbol", "service_version"):
+                value = snapshot.get(key)
+                if isinstance(value, str) and value:
+                    public_snapshot[key] = value
             public_snapshots.append(public_snapshot)
         return public_snapshots
 
