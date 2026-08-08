@@ -82,7 +82,10 @@ def test_metrics_keeps_bounded_recent_run_snapshots():
 def test_persistent_history_restores_validation_state(tmp_path):
     history = PaperValidationHistory(tmp_path / "paper-validation.jsonl")
     metrics = PaperValidationMetrics(history=history)
-    metrics.record({"valid": True, "issues": []})
+    metrics.record(
+        {"valid": True, "issues": []},
+        context={"symbol": "NSE:INFY", "service_version": "1.7.0"},
+    )
     metrics.record({"valid": False, "issues": ["risk"]})
 
     restored = PaperValidationMetrics(history=history)
@@ -92,6 +95,9 @@ def test_persistent_history_restores_validation_state(tmp_path):
     assert restored.invalid_runs == 1
     assert restored.history_status == "ok"
     assert restored.history_snapshots(1)[0]["run_number"] == 2
+    first_run = restored.history_snapshots(2)[0]
+    assert first_run["symbol"] == "NSE:INFY"
+    assert first_run["service_version"] == "1.7.0"
 
 
 def test_history_compacts_atomically_to_configured_retention(tmp_path):
