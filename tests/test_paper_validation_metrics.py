@@ -116,6 +116,7 @@ def test_history_compacts_atomically_to_configured_retention(tmp_path):
 
 def test_history_load_skips_malformed_records(tmp_path):
     history_path = tmp_path / "paper-validation.jsonl"
+    history = PaperValidationHistory(history_path)
     history_path.write_text(
         'not-json\n{"run_number":2,"valid":true,"issues":[]}\n',
         encoding="utf-8",
