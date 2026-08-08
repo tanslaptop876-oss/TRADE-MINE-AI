@@ -9,6 +9,7 @@ from app.services.indicators import add_indicators
 from app.services.live_risk_guard import LiveRiskGuard, TradingMode
 from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
+from app.services.paper_validation import validate_paper_result
 from app.services.pipeline import TradingPipeline
 from app.services.risk import RiskEngine
 from app.services.shadow_execution import ShadowExecutionRecorder, ShadowOrderIntent
@@ -117,9 +118,11 @@ def paper_run(req: PaperRunRequest):
         symbol=req.symbol,
         candles=[c.model_dump() for c in req.candles],
     )
-    result["account"] = {
+    account_snapshot = {
         "cash": round(account.cash, 2),
         "positions": dict(account.positions),
         "trade_count": len(account.trades),
     }
+    result["account"] = account_snapshot
+    result["validation"] = validate_paper_result(result, account_snapshot).as_dict()
     return result
