@@ -1,10 +1,16 @@
 from fastapi.testclient import TestClient
 
 from app.main import app, paper_validation_metrics
+from app.services.paper_validation_history import PaperValidationHistory
 from app.services.paper_validation_metrics import PaperValidationMetrics
 
 
 def reset_app_metrics() -> None:
+    paper_validation_metrics.history = None
+    paper_validation_metrics.history_status = "disabled"
+    paper_validation_metrics.max_recent_runs = 20
+    paper_validation_metrics.health_valid_rate_threshold = 0.95
+    paper_validation_metrics.health_min_runs = 5
     paper_validation_metrics.total_runs = 0
     paper_validation_metrics.valid_runs = 0
     paper_validation_metrics.invalid_runs = 0
@@ -26,6 +32,10 @@ def test_metrics_summary_starts_empty_and_safely_locked():
         "health_threshold": {
             "minimum_runs": 5,
             "minimum_valid_rate": 0.95,
+        },
+        "history_persistence": {
+            "enabled": False,
+            "status": "disabled",
         },
         "real_broker_dispatch_enabled": False,
     }
@@ -69,6 +79,21 @@ def test_metrics_keeps_bounded_recent_run_snapshots():
     assert [snapshot["run_number"] for snapshot in snapshots] == [2, 3]
 
 
+def test_persistent_history_restores_validation_state(tmp_path):
+    history = PaperValidationHistory(tmp_path / "paper-validation.jsonl")
+    metrics = PaperValidationMetrics(history=history)
+    metrics.record({"valid": True, "issues": []})
+    metrics.record({"valid": False, "issues": ["risk"]})
+
+    restored = PaperValidationMetrics(history=history)
+
+    assert restored.total_runs == 2
+    assert restored.valid_runs == 1
+    assert restored.invalid_runs == 1
+    assert restored.history_status == "ok"
+    assert restored.history_snapshots(1)[0]["run_number"] == 2
+
+
 def test_health_status_uses_explicit_sample_and_valid_rate_thresholds():
     healthy = PaperValidationMetrics(
         health_min_runs=3,
@@ -91,6 +116,7 @@ def test_health_status_uses_explicit_sample_and_valid_rate_thresholds():
     ):
         degraded.record(validation)
     assert degraded.health_status() == "degraded"
+    assert degraded.alerts()[0]["code"] == "paper_validation_rate_below_threshold"
 
 
 def test_summary_snapshots_do_not_mutate_internal_history():
@@ -114,6 +140,34 @@ def test_paper_metrics_endpoint_is_read_only_and_reports_dispatch_disabled():
     assert payload["recent_runs"] == []
     assert payload["health_status"] == "insufficient_data"
     assert payload["real_broker_dispatch_enabled"] is False
+
+
+def test_history_endpoint_is_bounded_and_dispatch_safe():
+    reset_app_metrics()
+    paper_validation_metrics.record({"valid": True, "issues": []})
+    paper_validation_metrics.record({"valid": False, "issues": ["risk"]})
+
+    response = TestClient(app).get("/v1/paper/history?limit=1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["runs"][0]["run_number"] == 2
+    assert payload["real_broker_dispatch_enabled"] is False
+
+
+def test_dashboard_exposes_metrics_alerts_and_safety_lock():
+    reset_app_metrics()
+    paper_validation_metrics.health_min_runs = 1
+    paper_validation_metrics.record({"valid": False, "issues": ["risk"]})
+
+    response = TestClient(app).get("/v1/observability/dashboard")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["active_alert_count"] == 1
+    assert payload["alerts"][0]["status"] == "active"
+    assert payload["safety"]["real_broker_dispatch_enabled"] is False
 
 
 def test_readiness_reports_validation_health_without_enabling_dispatch():
