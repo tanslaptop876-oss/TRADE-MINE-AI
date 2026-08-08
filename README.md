@@ -47,8 +47,11 @@ Read-only endpoints expose paper-validation health without enabling broker dispa
 - `GET /v1/observability/dashboard` — dashboard-ready metrics, alerts, and safety state
 
 History defaults to `data/paper_validation_history.jsonl`. Set
-`PAPER_VALIDATION_HISTORY_PATH` to use another local path. Generated history
-files are ignored by Git.
+`PAPER_VALIDATION_HISTORY_PATH` to use another local path. Retention defaults to
+10,000 valid records and can be configured with
+`PAPER_VALIDATION_HISTORY_MAX_RECORDS`. Compaction uses an atomic file replace,
+and malformed JSONL records are skipped during recovery. Generated history files
+are ignored by Git.
 
 See [the v1.8 plan](docs/V1_8_PLAN.md) for the next observability milestones.
 Real broker dispatch remains disabled.
