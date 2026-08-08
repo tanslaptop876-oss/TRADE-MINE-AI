@@ -3,14 +3,13 @@ import pytest
 from app.services.audit_log import AuditLog
 from app.services.broker_gateway import BrokerAdapter, BrokerOrder
 from app.services.controlled_live_gateway import ControlledLiveGateway
-from app.services.live_risk_guard import LiveRiskGuard, TradingMode
+from app.services.live_risk_guard import LiveRiskGuard, LiveRiskLimits, TradingMode
 
 
 class RecordingAdapter(BrokerAdapter):
     name = "recording"
 
-    def __init__(self, fail=False):
-        self.fail = fail
+    def __init__(self):
         self.orders = []
 
     def connection_status(self):
@@ -26,14 +25,18 @@ class RecordingAdapter(BrokerAdapter):
         return {"available": 100000.0}
 
     def place_order(self, order: BrokerOrder):
-        if self.fail:
-            raise RuntimeError("broker rejected order")
         self.orders.append(order)
         return {"status": "accepted", "order_id": "OID-1"}
 
 
-def open_guard():
-    return LiveRiskGuard(mode=TradingMode.LIVE, kill_switch=False, live_confirmed=True)
+def open_guard(**kwargs):
+    defaults = {
+        "mode": TradingMode.LIVE,
+        "kill_switch": False,
+        "live_confirmed": True,
+    }
+    defaults.update(kwargs)
+    return LiveRiskGuard(**defaults)
 
 
 def test_blocked_order_never_reaches_broker_and_is_audited():
@@ -55,7 +58,7 @@ def test_blocked_order_never_reaches_broker_and_is_audited():
     ]
 
 
-def test_successful_order_is_sent_once_and_audited():
+def test_open_guard_only_approves_preflight_and_never_calls_broker():
     adapter = RecordingAdapter()
     audit = AuditLog()
     gateway = ControlledLiveGateway(adapter, open_guard(), audit)
@@ -66,47 +69,63 @@ def test_successful_order_is_sent_once_and_audited():
         reference_price=100.0,
     )
 
-    assert result["status"] == "accepted"
-    assert len(adapter.orders) == 1
+    assert result == {
+        "approved": True,
+        "executed": False,
+        "broker_order_sent": False,
+        "mode": "live_preflight",
+        "broker": "recording",
+        "order_key": "ok-1",
+    }
+    assert adapter.orders == []
     assert [event["event_type"] for event in audit.recent()] == [
         "live_order_attempted",
-        "live_order_sent",
+        "live_order_preflight_approved",
     ]
 
 
-def test_duplicate_order_is_blocked_before_second_broker_call():
+def test_preflight_does_not_mark_duplicate_without_actual_submission():
     adapter = RecordingAdapter()
     audit = AuditLog()
     gateway = ControlledLiveGateway(adapter, open_guard(), audit)
     order = BrokerOrder("RELIANCE", "BUY", 1)
 
-    gateway.place_order(order_key="dup-1", order=order, reference_price=100.0)
-    with pytest.raises(PermissionError, match="duplicate order blocked"):
-        gateway.place_order(order_key="dup-1", order=order, reference_price=100.0)
+    first = gateway.place_order(order_key="dup-1", order=order, reference_price=100.0)
+    second = gateway.place_order(order_key="dup-1", order=order, reference_price=100.0)
 
-    assert len(adapter.orders) == 1
-    assert audit.recent()[-1]["event_type"] == "live_order_blocked"
+    assert first["approved"] is True
+    assert second["approved"] is True
+    assert adapter.orders == []
 
 
-def test_broker_failure_is_audited_and_not_marked_accepted():
-    adapter = RecordingAdapter(fail=True)
+def test_over_notional_is_blocked_before_broker_call():
+    adapter = RecordingAdapter()
     audit = AuditLog()
-    guard = open_guard()
+    guard = open_guard(limits=LiveRiskLimits(max_order_notional=50.0, max_daily_loss=1000.0))
     gateway = ControlledLiveGateway(adapter, guard, audit)
 
-    with pytest.raises(RuntimeError, match="broker rejected order"):
+    with pytest.raises(PermissionError, match="max order notional exceeded"):
         gateway.place_order(
-            order_key="fail-1",
+            order_key="big-1",
             order=BrokerOrder("RELIANCE", "BUY", 1),
             reference_price=100.0,
         )
 
-    assert audit.recent()[-1]["event_type"] == "live_order_failed"
+    assert adapter.orders == []
+    assert audit.recent()[-1]["event_type"] == "live_order_blocked"
 
-    adapter.fail = False
-    gateway.place_order(
-        order_key="fail-1",
-        order=BrokerOrder("RELIANCE", "BUY", 1),
-        reference_price=100.0,
-    )
-    assert len(adapter.orders) == 1
+
+def test_daily_loss_limit_blocks_preflight():
+    adapter = RecordingAdapter()
+    audit = AuditLog()
+    guard = open_guard(daily_pnl=-1000.0)
+    gateway = ControlledLiveGateway(adapter, guard, audit)
+
+    with pytest.raises(PermissionError, match="gate is closed"):
+        gateway.place_order(
+            order_key="loss-1",
+            order=BrokerOrder("RELIANCE", "BUY", 1),
+            reference_price=100.0,
+        )
+
+    assert adapter.orders == []
