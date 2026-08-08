@@ -53,6 +53,17 @@ History defaults to `data/paper_validation_history.jsonl`. Set
 and malformed JSONL records are skipped during recovery. Generated history files
 are ignored by Git.
 
+Internal alert lifecycle endpoints support acknowledgement and resolution without
+sending outbound notifications:
+
+- `GET /v1/observability/alerts`
+- `POST /v1/observability/alerts/{code}/acknowledge`
+- `POST /v1/observability/alerts/{code}/resolve`
+
+Alert state defaults to `data/paper_alert_journal.json` and can be configured
+with `PAPER_ALERT_JOURNAL_PATH`. Resolved alerts use a run-based cooldown;
+outbound delivery remains disabled.
+
 See [the v1.8 plan](docs/V1_8_PLAN.md) for the next observability milestones.
 Real broker dispatch remains disabled.
 
