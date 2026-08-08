@@ -58,7 +58,10 @@ class PaperValidationMetrics:
             "invalid_runs": self.invalid_runs,
             "valid_rate": round(self._valid_rate(), 4),
             "recent_issues": list(self.recent_issues),
-            "recent_runs": [dict(snapshot) for snapshot in self.recent_runs],
+            "recent_runs": [
+                {**snapshot, "issues": list(snapshot["issues"])}
+                for snapshot in self.recent_runs
+            ],
             "health_status": self.health_status(),
             "health_threshold": {
                 "minimum_runs": self.health_min_runs,
