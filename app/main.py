@@ -194,5 +194,8 @@ def paper_run(req: PaperRunRequest):
     result["account"] = account_snapshot
     validation = validate_paper_result(result, account_snapshot).as_dict()
     result["validation"] = validation
-    paper_validation_metrics.record(validation)
+    paper_validation_metrics.record(
+        validation,
+        context={"symbol": req.symbol, "service_version": APP_VERSION},
+    )
     return result
