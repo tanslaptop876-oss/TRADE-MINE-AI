@@ -59,7 +59,7 @@ if view == "Paper observability":
     if payload["alerts"]:
         st.subheader("Active alerts")
         for alert in payload["alerts"]:
-            st.warning(f'{alert["code"]}: {alert["message"]}')
+            st.warning(\n                f'{alert["code"]} [{alert["status"]}]: {alert["message"]}'\n            )
     else:
         st.info("No active paper-validation alerts.")
 
