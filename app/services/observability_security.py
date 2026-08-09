@@ -68,3 +68,26 @@ class ObservabilityAuditJournal:
                 if isinstance(event, dict):
                     events.append(redact_sensitive(event))
         return events[-limit:]
+
+
+    def diagnostics(self) -> dict[str, Any]:
+        valid_records = 0
+        malformed_records = 0
+        if self.path.exists():
+            with self.path.open(encoding="utf-8") as audit_file:
+                for line in audit_file:
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        malformed_records += 1
+                        continue
+                    if isinstance(event, dict):
+                        valid_records += 1
+                    else:
+                        malformed_records += 1
+        return {
+            "available": self.path.exists(),
+            "valid_record_count": valid_records,
+            "malformed_record_count": malformed_records,
+            "status": "degraded" if malformed_records else "ok",
+        }

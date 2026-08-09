@@ -125,6 +125,17 @@ def observability_audit(limit: int = Query(default=50, ge=1, le=200)):
     }
 
 
+@app.get("/v1/observability/storage")
+def observability_storage():
+    return {
+        "history": paper_validation_history.diagnostics(),
+        "audit": observability_audit_journal.diagnostics(),
+        "read_only": True,
+        "outbound_delivery_enabled": False,
+        "real_broker_dispatch_enabled": False,
+    }
+
+
 @app.get("/v1/observability/alerts")
 def observability_alerts():
     alerts = current_paper_alerts()
