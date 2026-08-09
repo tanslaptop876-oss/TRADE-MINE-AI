@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.services.observability_security import redact_sensitive
+from app.services.observability_security import ObservabilityAuditJournal, redact_sensitive
 
 
 DEFAULT_HISTORY_PATH = Path("data/paper_validation_history.jsonl")
@@ -25,6 +25,7 @@ class PaperValidationHistory:
         max_records: int = DEFAULT_MAX_RECORDS,
         max_age_days: int | None = None,
         lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS,
+        audit_journal: ObservabilityAuditJournal | None = None,
     ) -> None:
         if max_records < 1:
             raise ValueError("max_records must be positive")
@@ -36,6 +37,9 @@ class PaperValidationHistory:
         self.max_records = max_records
         self.max_age_days = max_age_days
         self.lock_timeout_seconds = lock_timeout_seconds
+        self.audit_journal = audit_journal
+        self.audit_status = "disabled" if audit_journal is None else "ok"
+        self._recovery_reported = False
 
     @property
     def backup_path(self) -> Path:
@@ -46,7 +50,11 @@ class PaperValidationHistory:
         return self.path.with_suffix(f"{self.path.suffix}.lock")
 
     @classmethod
-    def from_environment(cls) -> "PaperValidationHistory":
+    def from_environment(
+        cls,
+        *,
+        audit_journal: ObservabilityAuditJournal | None = None,
+    ) -> "PaperValidationHistory":
         configured_path = os.getenv("PAPER_VALIDATION_HISTORY_PATH")
         configured_retention = os.getenv("PAPER_VALIDATION_HISTORY_MAX_RECORDS")
         configured_age = os.getenv("PAPER_VALIDATION_HISTORY_MAX_AGE_DAYS")
@@ -70,7 +78,17 @@ class PaperValidationHistory:
             configured_path or DEFAULT_HISTORY_PATH,
             max_records=max_records,
             max_age_days=max_age_days,
+            audit_journal=audit_journal,
         )
+
+    def _audit(self, event_type: str, details: dict[str, Any]) -> None:
+        if self.audit_journal is None:
+            return
+        try:
+            self.audit_journal.append(event_type, details)
+            self.audit_status = "ok"
+        except OSError:
+            self.audit_status = "error"
 
     @contextmanager
     def _exclusive_lock(self) -> Iterator[None]:
@@ -107,6 +125,13 @@ class PaperValidationHistory:
                 history_file.flush()
                 os.fsync(history_file.fileno())
             self._compact_if_needed()
+        self._audit(
+            "paper_validation_history_appended",
+            {
+                "run_number": persisted.get("run_number"),
+                "valid": persisted.get("valid"),
+            },
+        )
 
     def _load_path(self, path: Path) -> list[dict[str, Any]]:
         snapshots: list[dict[str, Any]] = []
@@ -126,7 +151,14 @@ class PaperValidationHistory:
         snapshots = self._load_path(self.path)
         if snapshots or not self.path.exists():
             return snapshots
-        return self._load_path(self.backup_path)
+        recovered = self._load_path(self.backup_path)
+        if recovered and not self._recovery_reported:
+            self._audit(
+                "paper_validation_history_recovered",
+                {"recovered_record_count": len(recovered)},
+            )
+            self._recovery_reported = True
+        return recovered
 
     def recent(self, limit: int) -> list[dict[str, Any]]:
         return self.load()[-limit:]
@@ -170,5 +202,12 @@ class PaperValidationHistory:
                 compacted_file.flush()
                 os.fsync(compacted_file.fileno())
             os.replace(temporary_path, self.path)
+            self._audit(
+                "paper_validation_history_compacted",
+                {
+                    "previous_record_count": len(snapshots),
+                    "retained_record_count": len(retained),
+                },
+            )
         finally:
             temporary_path.unlink(missing_ok=True)
