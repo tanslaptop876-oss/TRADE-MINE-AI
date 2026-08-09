@@ -5,6 +5,7 @@ from app.services.observability_security import (
     redact_sensitive,
 )
 from app.services.paper_alerts import PaperAlertManager
+from app.services.paper_validation_history import PaperValidationHistory
 
 
 def test_sensitive_fields_are_recursively_redacted():
@@ -72,3 +73,41 @@ def test_audit_lines_remain_valid_json(tmp_path):
 
     line = journal.path.read_text(encoding="utf-8").strip()
     assert json.loads(line)["details"] == {"safe": True}
+
+
+def test_history_lifecycle_emits_append_compaction_and_recovery_events(tmp_path):
+    audit = ObservabilityAuditJournal(tmp_path / "audit.jsonl")
+    history_path = tmp_path / "history.jsonl"
+    history = PaperValidationHistory(
+        history_path,
+        max_records=1,
+        audit_journal=audit,
+    )
+
+    history.append({"run_number": 1, "valid": True, "issues": []})
+    history.append({"run_number": 2, "valid": False, "issues": ["risk"]})
+    history_path.write_text("corrupt-primary\n", encoding="utf-8")
+    recovered = history.load()
+
+    event_types = [event["event_type"] for event in audit.recent()]
+    assert event_types.count("paper_validation_history_appended") == 2
+    assert "paper_validation_history_compacted" in event_types
+    assert "paper_validation_history_recovered" in event_types
+    assert [record["run_number"] for record in recovered] == [1, 2]
+    assert history.audit_status == "ok"
+
+
+def test_history_audit_failure_does_not_block_persistence(tmp_path):
+    class FailingAuditJournal:
+        def append(self, event_type, details):
+            raise OSError("audit unavailable")
+
+    history = PaperValidationHistory(
+        tmp_path / "history.jsonl",
+        audit_journal=FailingAuditJournal(),
+    )
+
+    history.append({"run_number": 1, "valid": True, "issues": []})
+
+    assert history.load()[0]["run_number"] == 1
+    assert history.audit_status == "error"
