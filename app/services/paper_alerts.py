@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.services.observability_security import ObservabilityAuditJournal
+
 
 DEFAULT_ALERT_JOURNAL_PATH = Path("data/paper_alert_journal.json")
 
@@ -53,10 +55,13 @@ class PaperAlertManager:
         journal: PaperAlertJournal | None = None,
         *,
         cooldown_runs: int = 5,
+        audit_journal: ObservabilityAuditJournal | None = None,
     ) -> None:
         if cooldown_runs < 0:
             raise ValueError("cooldown_runs cannot be negative")
         self.journal = journal
+        self.audit_journal = audit_journal
+        self.audit_status = "disabled" if audit_journal is None else "ok"
         self.cooldown_runs = cooldown_runs
         self.outbound_delivery_enabled = False
         self._states = {} if journal is None else journal.load()
@@ -96,6 +101,7 @@ class PaperAlertManager:
             "updated_run": current_run,
         }
         self._persist()
+        self._audit("paper_alert_acknowledged", code, current_run)
 
     def resolve(self, code: str, *, current_run: int) -> None:
         self._states[code] = {
@@ -104,6 +110,19 @@ class PaperAlertManager:
             "updated_run": current_run,
         }
         self._persist()
+        self._audit("paper_alert_resolved", code, current_run)
+
+    def _audit(self, event_type: str, code: str, current_run: int) -> None:
+        if self.audit_journal is None:
+            return
+        try:
+            self.audit_journal.append(
+                event_type,
+                {"code": code, "current_run": current_run},
+            )
+            self.audit_status = "ok"
+        except OSError:
+            self.audit_status = "error"
 
     def _persist(self) -> None:
         if self.journal is not None:

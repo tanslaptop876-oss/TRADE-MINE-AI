@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.services.observability_security import redact_sensitive
+
 
 DEFAULT_HISTORY_PATH = Path("data/paper_validation_history.jsonl")
 DEFAULT_MAX_RECORDS = 10_000
@@ -39,7 +41,7 @@ class PaperValidationHistory:
 
     def append(self, snapshot: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        persisted = dict(snapshot)
+        persisted = redact_sensitive(dict(snapshot))
         persisted.setdefault(
             "recorded_at",
             datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -61,7 +63,7 @@ class PaperValidationHistory:
                 except json.JSONDecodeError:
                     continue
                 if isinstance(snapshot, dict):
-                    snapshots.append(snapshot)
+                    snapshots.append(redact_sensitive(snapshot))
         return snapshots
 
     def recent(self, limit: int) -> list[dict[str, Any]]:

@@ -64,6 +64,12 @@ Alert state defaults to `data/paper_alert_journal.json` and can be configured
 with `PAPER_ALERT_JOURNAL_PATH`. Resolved alerts use a run-based cooldown;
 outbound delivery remains disabled.
 
+Structured alert lifecycle audit events are available from
+`GET /v1/observability/audit`. Audit storage defaults to
+`data/observability_audit.jsonl` and can be configured with
+`OBSERVABILITY_AUDIT_PATH`. Token, password, secret, authorization, API-key,
+and broker-token fields are recursively redacted before persistence.
+
 See [the v1.8 plan](docs/V1_8_PLAN.md) for the next observability milestones.
 Real broker dispatch remains disabled.
 
