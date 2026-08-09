@@ -13,13 +13,37 @@ DEFAULT_AUDIT_PATH = Path("data/observability_audit.jsonl")
 DEFAULT_AUDIT_MAX_RECORDS = 10_000
 DEFAULT_AUDIT_LOCK_TIMEOUT_SECONDS = 5.0
 SENSITIVE_KEYS = {
+    "access_token",
     "api_key",
     "authorization",
     "broker_token",
+    "client_secret",
     "password",
+    "private_key",
+    "refresh_token",
     "secret",
     "token",
+    "x_api_key",
 }
+COMPACT_SENSITIVE_KEYS = {key.replace("_", "") for key in SENSITIVE_KEYS}
+
+
+def _normalize_key(key: str) -> str:
+    normalized = "".join(
+        character.lower() if character.isalnum() else "_"
+        for character in key
+    )
+    return "_".join(part for part in normalized.split("_") if part)
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    if not isinstance(key, str):
+        return False
+    normalized = _normalize_key(key)
+    return (
+        normalized in SENSITIVE_KEYS
+        or normalized.replace("_", "") in COMPACT_SENSITIVE_KEYS
+    )
 
 
 def redact_sensitive(value: Any) -> Any:
@@ -27,7 +51,7 @@ def redact_sensitive(value: Any) -> Any:
         return {
             key: (
                 "[REDACTED]"
-                if key.lower() in SENSITIVE_KEYS
+                if _is_sensitive_key(key)
                 else redact_sensitive(item)
             )
             for key, item in value.items()
