@@ -73,7 +73,9 @@ Structured alert and paper-history lifecycle audit events are available from
 `GET /v1/observability/audit`. History append, compaction, and backup recovery
 are recorded without exposing snapshot contents. Audit storage defaults to
 `data/observability_audit.jsonl` and can be configured with
-`OBSERVABILITY_AUDIT_PATH`. Token, password, secret, authorization, API-key,
+`OBSERVABILITY_AUDIT_PATH`. Retention defaults to 10,000 events and is
+configured with `OBSERVABILITY_AUDIT_MAX_RECORDS`; concurrent writers use a
+bounded lock and durable atomic compaction. Token, password, secret, authorization, API-key,
 and broker-token fields are recursively redacted before persistence. Audit
 failures are reported separately for alerts and history and never block paper
 history persistence.
