@@ -45,6 +45,7 @@ Read-only endpoints expose paper-validation health without enabling broker dispa
 - `GET /v1/paper/metrics` — aggregate health, thresholds, and recent snapshots
 - `GET /v1/paper/history?limit=20` — bounded restart-safe validation history
 - `GET /v1/observability/dashboard` — dashboard-ready metrics, alerts, and safety state
+- `GET /v1/observability/storage` — aggregate storage health and retention state
 
 History defaults to `data/paper_validation_history.jsonl`. Set
 `PAPER_VALIDATION_HISTORY_PATH` to use another local path. Retention defaults to
@@ -54,6 +55,8 @@ History defaults to `data/paper_validation_history.jsonl`. Set
 lock and durable flush before atomic compaction. The pre-compaction file is kept
 as a `.bak` recovery source, and malformed JSONL records are skipped. Generated
 history, lock, temporary, and backup files are ignored by Git.
+
+History and audit storage diagnostics expose only aggregate availability, valid/malformed record counts, backup/lock state, and retention settings. They do not expose storage paths or record contents.
 
 Internal alert lifecycle endpoints support acknowledgement and resolution without
 sending outbound notifications:
