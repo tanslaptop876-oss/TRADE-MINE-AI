@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: trademind-ai-staging
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: OBSERVABILITY_AUTH_MODE
+        value: oidc_proxy
+      - key: OBSERVABILITY_PROXY_SHARED_SECRET
+        generateValue: true
+      - key: PAPER_VALIDATION_HISTORY_PATH
+        value: /tmp/trademind/paper_validation_history.jsonl
+      - key: PAPER_ALERT_JOURNAL_PATH
+        value: /tmp/trademind/paper_alert_journal.json
+      - key: OBSERVABILITY_AUDIT_PATH
+        value: /tmp/trademind/observability_audit.jsonl
