@@ -7,6 +7,7 @@ from app.services.broker_smoke import run_broker_smoke_test
 from app.services.decision import DecisionEngine
 from app.services.indicators import add_indicators
 from app.services.live_risk_guard import LiveRiskGuard, TradingMode
+from app.services.observability_security import ObservabilityAuditJournal
 from app.services.paper_alerts import PaperAlertJournal, PaperAlertManager
 from app.services.paper_broker_adapter import PaperBrokerAdapter
 from app.services.paper_trading import PaperAccount, PaperBroker
@@ -29,7 +30,11 @@ shadow_recorder = ShadowExecutionRecorder()
 paper_validation_history = PaperValidationHistory.from_environment()
 paper_validation_metrics = PaperValidationMetrics(history=paper_validation_history)
 paper_alert_journal = PaperAlertJournal.from_environment()
-paper_alert_manager = PaperAlertManager(journal=paper_alert_journal)
+observability_audit_journal = ObservabilityAuditJournal.from_environment()
+paper_alert_manager = PaperAlertManager(
+    journal=paper_alert_journal,
+    audit_journal=observability_audit_journal,
+)
 
 
 class Candle(BaseModel):
@@ -104,6 +109,15 @@ def current_paper_alerts():
         paper_validation_metrics.alerts(),
         current_run=paper_validation_metrics.total_runs,
     )
+
+
+@app.get("/v1/observability/audit")
+def observability_audit(limit: int = Query(default=50, ge=1, le=200)):
+    return {
+        "events": observability_audit_journal.recent(limit),
+        "audit_status": paper_alert_manager.audit_status,
+        "real_broker_dispatch_enabled": False,
+    }
 
 
 @app.get("/v1/observability/alerts")
