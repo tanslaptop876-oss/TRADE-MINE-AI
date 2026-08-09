@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.services.assets import default_india_registry
@@ -7,6 +8,10 @@ from app.services.broker_smoke import run_broker_smoke_test
 from app.services.decision import DecisionEngine
 from app.services.indicators import add_indicators
 from app.services.live_risk_guard import LiveRiskGuard, TradingMode
+from app.services.observability_access import (
+    ObservabilityAccessError,
+    ObservabilityAccessGuard,
+)
 from app.services.observability_security import ObservabilityAuditJournal
 from app.services.paper_alerts import PaperAlertJournal, PaperAlertManager
 from app.services.paper_broker_adapter import PaperBrokerAdapter
@@ -20,6 +25,27 @@ from app.services.shadow_execution import ShadowExecutionRecorder, ShadowOrderIn
 
 APP_VERSION = "1.7.0"
 app = FastAPI(title="TradeMind AI", version=APP_VERSION)
+observability_access_guard = ObservabilityAccessGuard.from_environment()
+
+
+@app.middleware("http")
+async def protect_observability_access(request: Request, call_next):
+    protected = (
+        request.url.path.startswith("/v1/observability/")
+        or request.url.path in {"/v1/paper/metrics", "/v1/paper/history"}
+    )
+    if protected:
+        try:
+            request.state.observability_identity = (
+                observability_access_guard.authorize(request.headers)
+            )
+        except ObservabilityAccessError as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+            )
+    return await call_next(request)
+
 
 registry = default_india_registry()
 gateway_account = PaperAccount(starting_cash=100000)
@@ -111,6 +137,18 @@ def current_paper_alerts():
         paper_validation_metrics.alerts(),
         current_run=paper_validation_metrics.total_runs,
     )
+
+
+@app.get("/v1/observability/access")
+def observability_access(request: Request):
+    identity = request.state.observability_identity
+    return {
+        "authenticated": True,
+        "mode": observability_access_guard.mode.value,
+        "subject": identity.subject,
+        "groups": list(identity.groups),
+        "real_broker_dispatch_enabled": False,
+    }
 
 
 @app.get("/v1/observability/audit")

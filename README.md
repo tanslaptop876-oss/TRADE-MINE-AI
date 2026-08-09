@@ -84,6 +84,22 @@ history persistence.
 See [the v1.8 plan](docs/V1_8_PLAN.md) for the next observability milestones.
 Real broker dispatch remains disabled.
 
+## Observability authentication
+
+Trusted-network mode remains the local default. For deployment outside a trusted
+network, set `OBSERVABILITY_AUTH_MODE=oidc_proxy` and place TradeMind behind a
+Keycloak-integrated OIDC proxy. The proxy must strip client-supplied identity
+headers and inject `X-Auth-Request-User`, optional email/groups, and the
+proxy-to-app `X-TradeMind-Proxy-Secret`. Configure that secret only through
+`OBSERVABILITY_PROXY_SHARED_SECRET`. Optional group authorization uses
+`OBSERVABILITY_ALLOWED_GROUPS`.
+
+Keycloak brokers Google, Microsoft, and GitHub login into one issuer. Provider
+client secrets, the proxy shared secret, and OIDC credentials must stay in a
+deployment secret manager and must never be committed. OIDC proxy mode fails
+closed when trust or identity is missing. `GET /v1/observability/access` reports
+the authenticated access context without enabling broker dispatch.
+
 ## Status
 
 The project is currently in the cleanup/foundation stage. Changes are developed on feature branches and merged through pull requests before reaching `main`.
