@@ -49,9 +49,11 @@ Read-only endpoints expose paper-validation health without enabling broker dispa
 History defaults to `data/paper_validation_history.jsonl`. Set
 `PAPER_VALIDATION_HISTORY_PATH` to use another local path. Retention defaults to
 10,000 valid records and can be configured with
-`PAPER_VALIDATION_HISTORY_MAX_RECORDS`. Compaction uses an atomic file replace,
-and malformed JSONL records are skipped during recovery. Generated history files
-are ignored by Git.
+`PAPER_VALIDATION_HISTORY_MAX_RECORDS`. Optional age retention uses
+`PAPER_VALIDATION_HISTORY_MAX_AGE_DAYS`. Writers use a bounded cross-instance
+lock and durable flush before atomic compaction. The pre-compaction file is kept
+as a `.bak` recovery source, and malformed JSONL records are skipped. Generated
+history, lock, temporary, and backup files are ignored by Git.
 
 Internal alert lifecycle endpoints support acknowledgement and resolution without
 sending outbound notifications:
