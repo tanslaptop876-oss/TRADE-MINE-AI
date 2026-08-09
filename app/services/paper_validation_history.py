@@ -211,3 +211,46 @@ class PaperValidationHistory:
             )
         finally:
             temporary_path.unlink(missing_ok=True)
+
+
+    def diagnostics(self) -> dict[str, Any]:
+        valid_primary = 0
+        malformed_primary = 0
+        if self.path.exists():
+            with self.path.open(encoding="utf-8") as history_file:
+                for line in history_file:
+                    try:
+                        snapshot = json.loads(line)
+                    except json.JSONDecodeError:
+                        malformed_primary += 1
+                        continue
+                    if isinstance(snapshot, dict):
+                        valid_primary += 1
+                    else:
+                        malformed_primary += 1
+        backup_records = self._load_path(self.backup_path)
+        recovery_active = (
+            self.path.exists()
+            and valid_primary == 0
+            and bool(backup_records)
+        )
+        writer_lock_active = self.lock_path.exists()
+        status = "ok"
+        if malformed_primary or recovery_active:
+            status = "degraded"
+        if writer_lock_active:
+            status = "busy"
+        return {
+            "available": self.path.exists(),
+            "status": status,
+            "valid_record_count": len(self.load()),
+            "malformed_record_count": malformed_primary,
+            "backup_available": bool(backup_records),
+            "backup_recovery_active": recovery_active,
+            "writer_lock_active": writer_lock_active,
+            "retention": {
+                "max_records": self.max_records,
+                "max_age_days": self.max_age_days,
+            },
+            "audit_status": self.audit_status,
+        }
