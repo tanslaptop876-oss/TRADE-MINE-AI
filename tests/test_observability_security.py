@@ -207,3 +207,45 @@ def test_audit_retention_reads_positive_environment_value(monkeypatch, tmp_path)
     journal = ObservabilityAuditJournal.from_environment()
 
     assert journal.max_records == 7
+
+
+def test_sensitive_key_variants_are_redacted_without_false_positives():
+    payload = {
+        "Access-Token": "access-secret",
+        "refreshToken": "refresh-secret",
+        "CLIENT SECRET": "client-secret",
+        "private.key": "private-key",
+        "X-API-Key": "api-secret",
+        "token_count": 4,
+        "secretary": "visible",
+        7: "non-string-key",
+    }
+
+    redacted = redact_sensitive(payload)
+
+    assert redacted["Access-Token"] == "[REDACTED]"
+    assert redacted["refreshToken"] == "[REDACTED]"
+    assert redacted["CLIENT SECRET"] == "[REDACTED]"
+    assert redacted["private.key"] == "[REDACTED]"
+    assert redacted["X-API-Key"] == "[REDACTED]"
+    assert redacted["token_count"] == 4
+    assert redacted["secretary"] == "visible"
+    assert redacted[7] == "non-string-key"
+
+
+def test_variant_secrets_never_reach_audit_storage(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    journal = ObservabilityAuditJournal(path)
+    journal.append(
+        "credential_test",
+        {
+            "accessToken": "raw-access-secret",
+            "nested": {"client-secret": "raw-client-secret"},
+        },
+    )
+
+    stored = path.read_text(encoding="utf-8")
+
+    assert "raw-access-secret" not in stored
+    assert "raw-client-secret" not in stored
+    assert stored.count("[REDACTED]") == 2
