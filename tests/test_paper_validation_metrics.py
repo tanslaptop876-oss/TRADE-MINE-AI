@@ -218,3 +218,57 @@ def test_readiness_reports_validation_health_without_enabling_dispatch():
     payload = response.json()
     assert payload["paper_validation_health_status"] == "insufficient_data"
     assert payload["real_broker_dispatch_enabled"] is False
+
+
+def test_history_retains_only_records_within_configured_age(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    history = PaperValidationHistory(
+        tmp_path / "paper-validation.jsonl",
+        max_age_days=2,
+    )
+    old_recorded_at = (
+        datetime.now(timezone.utc) - timedelta(days=3)
+    ).isoformat().replace("+00:00", "Z")
+    history.append(
+        {
+            "run_number": 1,
+            "valid": True,
+            "issues": [],
+            "recorded_at": old_recorded_at,
+        }
+    )
+    history.append({"run_number": 2, "valid": True, "issues": []})
+
+    assert [record["run_number"] for record in history.load()] == [2]
+
+
+def test_history_recovers_from_backup_when_primary_has_no_valid_records(tmp_path):
+    history_path = tmp_path / "paper-validation.jsonl"
+    history = PaperValidationHistory(history_path, max_records=1)
+    history.append({"run_number": 1, "valid": True, "issues": []})
+    history.append({"run_number": 2, "valid": True, "issues": []})
+    assert history.backup_path.exists()
+
+    history_path.write_text("corrupt-primary\n", encoding="utf-8")
+
+    recovered = history.load()
+    assert [record["run_number"] for record in recovered] == [1, 2]
+
+
+def test_concurrent_history_instances_do_not_lose_records(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    history_path = tmp_path / "paper-validation.jsonl"
+
+    def append_run(run_number: int) -> None:
+        PaperValidationHistory(history_path, max_records=100).append(
+            {"run_number": run_number, "valid": True, "issues": []}
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(append_run, range(1, 41)))
+
+    records = PaperValidationHistory(history_path).load()
+    assert sorted(record["run_number"] for record in records) == list(range(1, 41))
+    assert not history_path.with_suffix(".jsonl.lock").exists()
