@@ -161,3 +161,49 @@ def test_storage_diagnostics_endpoint_is_read_only_and_dispatch_safe():
         "valid_record_count",
         "malformed_record_count",
     }
+
+
+def test_audit_journal_compacts_to_configured_retention(tmp_path):
+    journal = ObservabilityAuditJournal(tmp_path / "audit.jsonl", max_records=2)
+
+    journal.append("event_1", {"sequence": 1})
+    journal.append("event_2", {"sequence": 2})
+    journal.append("event_3", {"sequence": 3})
+
+    assert [event["event_type"] for event in journal.recent(10)] == [
+        "event_2",
+        "event_3",
+    ]
+    diagnostics = journal.diagnostics()
+    assert diagnostics["valid_record_count"] == 2
+    assert diagnostics["retention"] == {"max_records": 2}
+    assert diagnostics["writer_lock_active"] is False
+
+
+def test_concurrent_audit_journals_do_not_lose_events(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = tmp_path / "audit.jsonl"
+
+    def append_event(sequence: int) -> None:
+        ObservabilityAuditJournal(path, max_records=100).append(
+            "concurrent_event",
+            {"sequence": sequence},
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(append_event, range(40)))
+
+    events = ObservabilityAuditJournal(path).recent(100)
+    assert sorted(event["details"]["sequence"] for event in events) == list(range(40))
+    assert not path.with_suffix(".jsonl.lock").exists()
+    assert not path.with_suffix(".jsonl.tmp").exists()
+
+
+def test_audit_retention_reads_positive_environment_value(monkeypatch, tmp_path):
+    monkeypatch.setenv("OBSERVABILITY_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("OBSERVABILITY_AUDIT_MAX_RECORDS", "7")
+
+    journal = ObservabilityAuditJournal.from_environment()
+
+    assert journal.max_records == 7
