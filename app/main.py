@@ -27,10 +27,12 @@ broker_gateway = BrokerGateway(mode=BrokerMode.PAPER)
 broker_gateway.register(PaperBrokerAdapter(gateway_account, registry))
 live_risk_guard = LiveRiskGuard()
 shadow_recorder = ShadowExecutionRecorder()
-paper_validation_history = PaperValidationHistory.from_environment()
+observability_audit_journal = ObservabilityAuditJournal.from_environment()
+paper_validation_history = PaperValidationHistory.from_environment(
+    audit_journal=observability_audit_journal,
+)
 paper_validation_metrics = PaperValidationMetrics(history=paper_validation_history)
 paper_alert_journal = PaperAlertJournal.from_environment()
-observability_audit_journal = ObservabilityAuditJournal.from_environment()
 paper_alert_manager = PaperAlertManager(
     journal=paper_alert_journal,
     audit_journal=observability_audit_journal,
@@ -115,7 +117,10 @@ def current_paper_alerts():
 def observability_audit(limit: int = Query(default=50, ge=1, le=200)):
     return {
         "events": observability_audit_journal.recent(limit),
-        "audit_status": paper_alert_manager.audit_status,
+        "audit_status": {
+            "alerts": paper_alert_manager.audit_status,
+            "history": paper_validation_history.audit_status,
+        },
         "real_broker_dispatch_enabled": False,
     }
 
